@@ -1,0 +1,9 @@
+[package]
+name = "pastebin_rs"
+version = "0.1.0"
+authors = ["Max Holder <mxhold@gmail.com>"]
+
+[dependencies]
+hyper = "0.9"
+regex = "0.1"
+
