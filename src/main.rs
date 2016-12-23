@@ -1,57 +1,29 @@
-extern crate hyper;
-extern crate regex;
+extern crate iron;
+extern crate router;
 
-use hyper::server::{Server, Request, Response};
-use hyper::uri::RequestUri::*;
-use regex::Regex;
+use iron::prelude::*;
+use router::Router;
+use std::io::Read;
 
-fn hello(req: Request, res: Response) {
-    let path: String = match req.uri {
-        AbsolutePath(string) => string,
-        _ => panic!(),
-    };
+fn post_pastebin(req: &mut Request) -> IronResult<Response> {
+    let mut req_body = String::new();
+    req.body.read_to_string(&mut req_body).unwrap();
+    let url = format!("{}123", req.url);
+    Ok(Response::with((iron::status::Ok, url)))
+}
 
-    println!("{}", path);
-
-    let hello_regex = Regex::new(r"^/hello(.+)$").unwrap();
-
-    // Hmm is it faster to do is_match then captures or just captures?
-
-    let response_text: String = if hello_regex.is_match(&path) {
-        let caps = hello_regex.captures(&path).unwrap();
-        "Hi ".to_string() + caps.at(1).unwrap() + "!"
+fn get_pastebin(req: &mut Request) -> IronResult<Response> {
+    let id = req.extensions.get::<Router>().unwrap().find("id").unwrap();
+    if id == "123" {
+        Ok(Response::with((iron::status::Ok, "hi")))
     } else {
-        "Yo".to_string()
-    };
-
-    res.send(response_text.as_bytes()).unwrap();
+        Ok(Response::with((iron::status::NotFound, "Not Found")))
+    }
 }
 
 fn main() {
-    println!("Created server");
-    match Server::http("localhost:5000") {
-        Ok(server) => {
-            println!("Handling");
-            server.handle(hello).unwrap();
-        },
-        Err(err) => {
-            println!("Err");
-            println!("{:?}", err);
-        },
-    };
-    println!("Server disconnnected");
-}
-
-use std::{thread, time};
-
-#[test]
-fn test_hello() {
-    thread::spawn(move || {
-        main();
-        thread::sleep(time::Duration::from_secs(10));
-        println!("Done");
-    });
-        thread::sleep(time::Duration::from_secs(15));
-    let result = "Hi World";
-    assert_eq!("Hi World", result);
+    let mut router = Router::new();
+    router.post("/", post_pastebin, "post_pastebin");
+    router.get("/:id", get_pastebin, "get_pastebin");
+    Iron::new(router).http("localhost:3000").unwrap();
 }
