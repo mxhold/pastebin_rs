@@ -7,63 +7,80 @@ extern crate rusqlite;
 extern crate uuid;
 
 use iron::prelude::*;
-use router::Router;
+use iron::status;
 use std::io::Read;
 use r2d2_sqlite::SqliteConnectionManager;
-use uuid::Uuid;
 
 type SqlitePool = r2d2::Pool<SqliteConnectionManager>;
 type SqlitePooledConnection = r2d2::PooledConnection<SqliteConnectionManager>;
 
-struct AppDb;
-impl iron::typemap::Key for AppDb { type Value = SqlitePool; }
+struct ConnectionPool;
+impl iron::typemap::Key for ConnectionPool {
+    type Value = SqlitePool;
+}
 
 fn setup_connection_pool() -> SqlitePool {
     let config = r2d2::Config::default();
-    let manager = r2d2_sqlite::SqliteConnectionManager::new("./db.sqlite3");
+    let manager = SqliteConnectionManager::new("./db.sqlite3");
     r2d2::Pool::new(config, manager).unwrap()
 }
 
+fn get_connection(req: &mut Request) -> SqlitePooledConnection {
+    let pool = req.get::<persistent::Read<ConnectionPool>>().unwrap();
+    pool.get().unwrap()
+}
+
 fn post_pastebin(req: &mut Request) -> IronResult<Response> {
-    let pool = req.get::<persistent::Read<AppDb>>().unwrap();
-    let conn = pool.get().unwrap();
+    let conn = get_connection(req);
 
     let mut req_body = String::new();
     req.body.read_to_string(&mut req_body).unwrap();
-    let id: String = format!("{}", Uuid::new_v4());
-    conn.execute("INSERT INTO pastes VALUES ($1, $2)", &[&id, &req_body]).unwrap();
-    let url = format!("{}{}", req.url, id);
-    Ok(Response::with((iron::status::Ok, url)))
-}
 
-fn get_pastebin(req: &mut Request) -> IronResult<Response> {
-    let pool = req.get::<persistent::Read<AppDb>>().unwrap();
-    let conn = pool.get().unwrap();
-
-    let id = req.extensions.get::<Router>().unwrap().find("id").unwrap();
-    let body: rusqlite::Result<String> = conn.query_row("SELECT body FROM pastes WHERE name = $1", &[&id], |row| {
-        row.get(0)
-    });
-
-    match body {
-        Ok(body) => Ok(Response::with((iron::status::Ok, body))),
-        Err(_) => Ok(Response::with((iron::status::NotFound, ""))),
+    match insert_paste(&conn, &req_body) {
+        Ok(id) => Ok(Response::with((status::Ok, format!("{}{}\n", req.url, id)))),
+        Err(_) => Ok(Response::with((status::ServiceUnavailable, ""))),
     }
 }
 
+fn get_pastebin(req: &mut Request) -> IronResult<Response> {
+    let conn = get_connection(req);
+
+    let id = req.extensions.get::<router::Router>().unwrap().find("id").unwrap();
+
+    match get_paste_body_by_id(&conn, &id) {
+        Some(body) => {
+            Ok(Response::with((status::Ok, body)))
+        }
+        None => Ok(Response::with((status::NotFound, ""))),
+    }
+}
+
+fn get_paste_body_by_id(conn: &SqlitePooledConnection, id: &str) -> Option<String> {
+    let query = "SELECT body FROM pastes WHERE id = $1";
+    conn.query_row(query, &[&id], |row| row.get(0)).ok()
+}
+
+fn insert_paste(conn: &SqlitePooledConnection, body: &str) -> Result<String, rusqlite::Error> {
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute("INSERT INTO pastes VALUES ($1, $2)", &[&id, &body]).and(Ok(id))
+}
+
+fn setup_database(conn: &SqlitePooledConnection) {
+    conn.execute("DROP TABLE IF EXISTS pastes", &[]).unwrap();
+    conn.execute("CREATE TABLE pastes (id TEXT, body BLOB)", &[]).unwrap();
+}
+
 fn main() {
-    let mut router = Router::new();
+    let mut router = router::Router::new();
     router.post("/", post_pastebin, "post_pastebin");
     router.get("/:id", get_pastebin, "get_pastebin");
 
     let pool = setup_connection_pool();
-
     let conn = pool.get().unwrap();
-    conn.execute("DROP TABLE IF EXISTS pastes", &[]).unwrap();
-    conn.execute("CREATE TABLE pastes (name TEXT, body BLOB)", &[]).unwrap();
+    setup_database(&conn);
 
     let mut middleware = Chain::new(router);
-    middleware.link(persistent::Read::<AppDb>::both(pool));
+    middleware.link(persistent::Read::<ConnectionPool>::both(pool));
 
     Iron::new(middleware).http("localhost:3000").unwrap();
 }
