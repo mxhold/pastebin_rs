@@ -9,7 +9,6 @@ extern crate uuid;
 use iron::prelude::*;
 use router::Router;
 use std::io::Read;
-//use rusqlite::Connection;
 use r2d2_sqlite::SqliteConnectionManager;
 use uuid::Uuid;
 
@@ -42,11 +41,14 @@ fn get_pastebin(req: &mut Request) -> IronResult<Response> {
     let conn = pool.get().unwrap();
 
     let id = req.extensions.get::<Router>().unwrap().find("id").unwrap();
-    let body: String = conn.query_row("SELECT body FROM pastes WHERE name = $1", &[&id], |row| {
+    let body: rusqlite::Result<String> = conn.query_row("SELECT body FROM pastes WHERE name = $1", &[&id], |row| {
         row.get(0)
-    }).unwrap();
+    });
 
-    Ok(Response::with((iron::status::Ok, body)))
+    match body {
+        Ok(body) => Ok(Response::with((iron::status::Ok, body))),
+        Err(_) => Ok(Response::with((iron::status::NotFound, ""))),
+    }
 }
 
 fn main() {
