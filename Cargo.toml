@@ -6,4 +6,8 @@ authors = ["Max Holder <mxhold@gmail.com>"]
 [dependencies]
 router = "*"
 iron = "*"
-
+rusqlite = "*"
+r2d2 = "*"
+r2d2_sqlite = "*"
+persistent = "*"
+uuid = { version = "0.2", features = ["v4"] }
