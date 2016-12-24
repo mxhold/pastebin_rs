@@ -9,22 +9,18 @@ extern crate uuid;
 use iron::prelude::*;
 use iron::status;
 use std::io::Read;
-use r2d2_sqlite::SqliteConnectionManager;
-
-pub type SqlitePool = r2d2::Pool<SqliteConnectionManager>;
-pub type SqlitePooledConnection = r2d2::PooledConnection<SqliteConnectionManager>;
 
 pub struct ConnectionPool;
 impl iron::typemap::Key for ConnectionPool {
-    type Value = SqlitePool;
+    type Value = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
 }
 
 struct DatabaseConnection {
-    conn: SqlitePooledConnection,
+    conn: r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>,
 }
 
 impl DatabaseConnection {
-    fn new(pool: &SqlitePool) -> DatabaseConnection {
+    fn new(pool: &r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>) -> DatabaseConnection {
         DatabaseConnection { conn: pool.get().unwrap() }
     }
 
@@ -76,7 +72,7 @@ fn main() {
     router.get("/:id", get_pastebin, "get_pastebin");
 
     let config = r2d2::Config::default();
-    let manager = SqliteConnectionManager::new("./db.sqlite3");
+    let manager = r2d2_sqlite::SqliteConnectionManager::new("./db.sqlite3");
     let pool = r2d2::Pool::new(config, manager).unwrap();
     DatabaseConnection::new(&pool).setup_database().unwrap();
 
