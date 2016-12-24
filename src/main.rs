@@ -80,7 +80,7 @@ fn main() {
     setup_database(&conn);
 
     let mut middleware = Chain::new(router);
-    middleware.link(persistent::Read::<ConnectionPool>::both(pool));
+    middleware.link_before(persistent::Read::<ConnectionPool>::one(pool));
 
     Iron::new(middleware).http("localhost:3000").unwrap();
 }
