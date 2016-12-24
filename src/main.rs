@@ -49,7 +49,7 @@ fn post_pastebin(req: &mut Request) -> IronResult<Response> {
     req.body.read_to_string(&mut req_body).unwrap();
 
     match conn.insert_paste(&req_body) {
-        Ok(id) => Ok(Response::with((status::Ok, format!("{}{}\n", req.url, id)))),
+        Ok(id) => Ok(Response::with((status::Created, format!("{}{}\n", req.url, id)))),
         Err(_) => Ok(Response::with((status::ServiceUnavailable, ""))),
     }
 }
