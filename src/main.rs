@@ -66,8 +66,7 @@ fn insert_paste(conn: &SqlitePooledConnection, body: &str) -> Result<String, rus
 }
 
 fn setup_database(conn: &SqlitePooledConnection) {
-    conn.execute("DROP TABLE IF EXISTS pastes", &[]).unwrap();
-    conn.execute("CREATE TABLE pastes (id TEXT, body BLOB)", &[]).unwrap();
+    conn.execute("CREATE TABLE IF NOT EXISTS pastes (id TEXT, body BLOB)", &[]).unwrap();
 }
 
 fn main() {
